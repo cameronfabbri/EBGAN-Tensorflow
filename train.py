@@ -72,14 +72,14 @@ if __name__ == '__main__':
    G_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errG, var_list=g_vars, global_step=global_step)
 
    # optimize D
-   D_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errD, var_list=d_vars, global_step=global_step)
+   D_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errD, var_list=d_vars)
 
    saver = tf.train.Saver(max_to_keep=1)
    init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
    sess  = tf.Session()
    sess.run(init)
 
-   summary_writer = tf.summary.FileWriter(CHECKPOINT_DIR+DATASET+'/'+'logs/', graph=tf.get_default_graph())
+   summary_writer = tf.summary.FileWriter(CHECKPOINT_DIR+'/'+'logs/', graph=tf.get_default_graph())
 
    tf.add_to_collection('G_train_op', G_train_op)
    tf.add_to_collection('D_train_op', D_train_op)
@@ -110,6 +110,7 @@ if __name__ == '__main__':
       sess.run(D_train_op, feed_dict={z:batch_z})
 
       batch_z = np.random.normal(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
+      sess.run(G_train_op, feed_dict={z:batch_z})
       sess.run(G_train_op, feed_dict={z:batch_z})
 
       D_loss, G_loss, summary = sess.run([errD, errG, merged_summary_op], feed_dict={z:batch_z})
