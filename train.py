@@ -1,7 +1,7 @@
 import scipy.misc as misc
 import time
 import tensorflow as tf
-from architecture import netD, netG
+from architecture import netD, netG, pullaway_loss
 import numpy as np
 import random
 import ntpath
@@ -46,13 +46,15 @@ if __name__ == '__main__':
    # generated images
    gen_images = netG(z, BATCH_SIZE, NUM_GPU)
 
-   # get the output from D on the real and fake data
-   errD_real = netD(real_images, BATCH_SIZE, NUM_GPU)
-   errD_fake = netD(gen_images, BATCH_SIZE, NUM_GPU, reuse=True)
+   errD_real, embeddings_real, decoded_real = netD(real_images, BATCH_SIZE)
+   errD_fake, embeddings_fake, decoded_fake = netD(gen_images, BATCH_SIZE)
 
    # cost functions
-   errD = tf.reduce_mean(errD_real - errD_fake)
-   errG = tf.reduce_mean(errD_fake)
+   #errD = tf.reduce_mean(errD_real - errD_fake)
+   margin = 20
+   errD = margin - errD_fake+errD_real
+   pt_loss = pullaway_loss(embeddings_fake, BATCH_SIZE)
+   errG = errD_fake + 0.1*pt_loss
 
    # tensorboard summaries
    tf.summary.scalar('d_loss', errD)
@@ -67,10 +69,10 @@ if __name__ == '__main__':
    g_vars = [var for var in t_vars if 'g_' in var.name]
 
    # optimize G
-   G_train_op = tf.train.RMSPropOptimizer(learning_rate=0.00005).minimize(errG, var_list=g_vars, global_step=global_step)
+   G_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errG, var_list=g_vars, global_step=global_step)
 
    # optimize D
-   D_train_op = tf.train.RMSPropOptimizer(learning_rate=0.00005).minimize(errD, var_list=d_vars, global_step=global_step)
+   D_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errD, var_list=d_vars, global_step=global_step)
 
    saver = tf.train.Saver(max_to_keep=1)
    init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
@@ -104,22 +106,12 @@ if __name__ == '__main__':
       
       start = time.time()
 
-      # get the discriminator properly trained at the start
-      if step < 25 or step % 500 == 0:
-         n_critic = 100
-      else: n_critic = 5
+      batch_z = np.random.uniform(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
+      sess.run(D_train_op, feed_dict={z:batch_z})
 
-      # train the discriminator for 5 or 25 runs
-      for critic_itr in range(n_critic):
-         batch_z = np.random.uniform(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
-         sess.run(D_train_op, feed_dict={z:batch_z})
-         sess.run(clip_discriminator_var_op)
-
-      # now train the generator once! use normal distribution, not uniform!!
       batch_z = np.random.normal(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
       sess.run(G_train_op, feed_dict={z:batch_z})
 
-      # now get all losses and summary *without* performing a training step - for tensorboard
       D_loss, G_loss, summary = sess.run([errD, errG, merged_summary_op], feed_dict={z:batch_z})
       summary_writer.add_summary(summary, step)
 

@@ -13,7 +13,7 @@ def lrelu(x, leak=0.2, name='lrelu'):
 def mse(pred, real, batch_size):
    return tf.sqrt(2*tf.nn.l2_loss(pred-real))/batch_size
 
-def netG(z, batch_size):
+def netG(z, batch_size, num_gpu=1):
 
    print 'GENERATOR'
    z = slim.fully_connected(z, 4*4*1024, normalizer_fn=slim.batch_norm, activation_fn=tf.identity, scope='g_z')
@@ -46,6 +46,15 @@ def netG(z, batch_size):
    tf.add_to_collection('vars', conv4)
 
    return conv4 
+
+
+def pullaway_loss(embeddings, batch_size):
+   norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+   normalized_embeddings = embeddings / norm
+   similarity = tf.matmul(normalized_embeddings, normalized_embeddings, transpose_b=True)
+   batch_size = tf.cast(tf.shape(embeddings)[0], tf.float32)
+   pt_loss = (tf.reduce_sum(similarity) - batch_size) / (batch_size * (batch_size - 1))
+   return pt_loss
 
 
 def netD(input_images, batch_size, reuse=False):
