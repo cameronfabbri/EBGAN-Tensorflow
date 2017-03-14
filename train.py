@@ -1,54 +1,64 @@
+import scipy.misc as misc
+import time
 import tensorflow as tf
-from architecture import encoder, decoder, netD, netG, mse
+from architecture import netD, netG
 import numpy as np
 import random
 import ntpath
 import sys
 import cv2
 import os
+from skimage import color
+import argparse
+import data_ops
 
-sys.path.insert(0, '../ops/')
+if __name__ == '__main__':
 
-import loadceleba
+   parser = argparse.ArgumentParser()
+   parser.add_argument('--DATASET',    required=True,help='The DATASET to use')
+   parser.add_argument('--DATA_DIR',   required=True,help='Directory where data is')
+   parser.add_argument('--BATCH_SIZE', required=True,help='Batch size',type=int)
+   parser.add_argument('--NUM_GPU',    required=False,default=1,help='Number of GPUs to use', type=int)
+   a = parser.parse_args()
 
-'''
-   Builds the graph and sets up params, then starts training
-'''
-def buildAndTrain(info):
+   DATASET        = a.DATASET
+   DATA_DIR       = a.DATA_DIR
+   BATCH_SIZE     = a.BATCH_SIZE
+   NUM_GPU        = a.NUM_GPU
+   CHECKPOINT_DIR = 'checkpoints/'+DATASET+'/'
+   IMAGES_DIR     = CHECKPOINT_DIR+'images/'
 
-   checkpoint_dir = info['checkpoint_dir']
-   batch_size     = info['batch_size']
-   dataset        = info['dataset']
-   data_dir       = info['data_dir']
-   use_pt         = info['use_pt']
-   load           = info['load']
-
-   # load data
-   image_data = loadceleba.load(load=load, data_dir=data_dir)
-
+   try: os.mkdir('checkpoints/')
+   except: pass
+   try: os.mkdir(CHECKPOINT_DIR)
+   except: pass
+   try: os.mkdir(IMAGES_DIR)
+   except: pass
+   
    # placeholders for data going into the network
    global_step = tf.Variable(0, name='global_step', trainable=False)
-   real_images = tf.placeholder(tf.float32, shape=(batch_size, 64, 64, 3), name='color_images')
-   z           = tf.placeholder(tf.float32, shape=(batch_size, 100), name='z')
+   z           = tf.placeholder(tf.float32, shape=(BATCH_SIZE, 100), name='z')
+
+   train_images_list = data_ops.loadData(DATA_DIR, DATASET)
+   filename_queue    = tf.train.string_input_producer(train_images_list)
+   real_images       = data_ops.read_input_queue(filename_queue, BATCH_SIZE)
 
    # generated images
-   gen_images = netG(z, batch_size)
+   gen_images = netG(z, BATCH_SIZE, NUM_GPU)
 
-   D_loss_real, encoded_real, decoded_real = netD(real_images, batch_size)
-   D_loss_fake, encoded_fake, decoded_fake = netD(gen_images, batch_size, reuse=True)
-
-   # margin for celeba
-   margin = 20
+   # get the output from D on the real and fake data
+   errD_real = netD(real_images, BATCH_SIZE, NUM_GPU)
+   errD_fake = netD(gen_images, BATCH_SIZE, NUM_GPU, reuse=True)
 
    # cost functions
-   errD = D_loss_real + margin-D_loss_fake
-   errG = D_loss_fake
+   errD = tf.reduce_mean(errD_real - errD_fake)
+   errG = tf.reduce_mean(errD_fake)
 
    # tensorboard summaries
    tf.summary.scalar('d_loss', errD)
    tf.summary.scalar('g_loss', errG)
-   tf.summary.image('real_images', real_images, max_outputs=batch_size)
-   tf.summary.image('generated_images', gen_images, max_outputs=batch_size)
+   #tf.summary.image('real_images', real_images, max_outputs=BATCH_SIZE)
+   #tf.summary.image('generated_images', gen_images, max_outputs=BATCH_SIZE)
    merged_summary_op = tf.summary.merge_all()
 
    # get all trainable variables, and split by network G and network D
@@ -57,26 +67,23 @@ def buildAndTrain(info):
    g_vars = [var for var in t_vars if 'g_' in var.name]
 
    # optimize G
-   G_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errG, var_list=g_vars, global_step=global_step)
+   G_train_op = tf.train.RMSPropOptimizer(learning_rate=0.00005).minimize(errG, var_list=g_vars, global_step=global_step)
 
    # optimize D
-   D_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errD, var_list=d_vars, global_step=global_step)
+   D_train_op = tf.train.RMSPropOptimizer(learning_rate=0.00005).minimize(errD, var_list=d_vars, global_step=global_step)
 
    saver = tf.train.Saver(max_to_keep=1)
-   init  = tf.global_variables_initializer()
-   
+   init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
    sess  = tf.Session()
    sess.run(init)
 
-   # write out logs for tensorboard to the checkpointSdir
-   summary_writer = tf.summary.FileWriter(checkpoint_dir+'/'+'logs/', graph=tf.get_default_graph())
-
-   ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+   summary_writer = tf.summary.FileWriter(CHECKPOINT_DIR+DATASET+'/'+'logs/', graph=tf.get_default_graph())
 
    tf.add_to_collection('G_train_op', G_train_op)
    tf.add_to_collection('D_train_op', D_train_op)
-
+   
    # restore previous model if there is one
+   ckpt = tf.train.get_checkpoint_state(CHECKPOINT_DIR)
    if ckpt and ckpt.model_checkpoint_path:
       print "Restoring previous model..."
       try:
@@ -90,39 +97,44 @@ def buildAndTrain(info):
 
    step = sess.run(global_step)
    
+   coord = tf.train.Coordinator()
+   threads = tf.train.start_queue_runners(sess, coord=coord)
+
    while True:
+      
+      start = time.time()
 
-      batch_real_images = random.sample(image_data, batch_size)
-      batch_z = np.random.uniform(-1.0, 1.0, size=[batch_size, 100]).astype(np.float32)
+      # get the discriminator properly trained at the start
+      if step < 25 or step % 500 == 0:
+         n_critic = 100
+      else: n_critic = 5
 
-      sess.run(D_train_op, feed_dict={real_images:batch_real_images, z:batch_z})
-      sess.run(G_train_op, feed_dict={real_images:batch_real_images, z:batch_z})
-      sess.run(G_train_op, feed_dict={real_images:batch_real_images, z:batch_z})
+      # train the discriminator for 5 or 25 runs
+      for critic_itr in range(n_critic):
+         batch_z = np.random.uniform(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
+         sess.run(D_train_op, feed_dict={z:batch_z})
+         sess.run(clip_discriminator_var_op)
 
-      Gerr, Derr, summary = sess.run([errG, errD, merged_summary_op], feed_dict={real_images:batch_real_images, z:batch_z})
+      # now train the generator once! use normal distribution, not uniform!!
+      batch_z = np.random.normal(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
+      sess.run(G_train_op, feed_dict={z:batch_z})
 
+      # now get all losses and summary *without* performing a training step - for tensorboard
+      D_loss, G_loss, summary = sess.run([errD, errG, merged_summary_op], feed_dict={z:batch_z})
       summary_writer.add_summary(summary, step)
 
-      print 'step:',step,'D loss:',Derr,'G_loss:',Gerr
+      print 'step:',step,'D loss:',D_loss,'G_loss:',G_loss,'time:',time.time()-start
       step += 1
-
-      if step%500 == 0:
+    
+      if step%1000 == 0:
          print 'Saving model...'
-         saver.save(sess, checkpoint_dir+'checkpoint-'+str(step))
-         saver.export_meta_graph(checkpoint_dir+'checkpoint-'+str(step)+'.meta')
-
-         batch_z  = np.random.uniform(-1.0, 1.0, size=[batch_size, 100]).astype(np.float32)
+         saver.save(sess, CHECKPOINT_DIR+'checkpoint-'+str(step))
+         saver.export_meta_graph(CHECKPOINT_DIR+'checkpoint-'+str(step)+'.meta')
+         batch_z  = np.random.uniform(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
          gen_imgs = sess.run([gen_images], feed_dict={z:batch_z})
 
-         num = 0
-         for img in gen_imgs[0]:
-            img = np.asarray(img)
-            img = (img+1.)/2. # these two lines properly scale from [-1, 1] to [0, 255]
-            img *= 255.0/img.max()
-            cv2.imwrite('images/'+dataset+'_'+str(use_pt)+'_'+str(step)+'_'+str(num)+'.png', img)
-            num += 1
-            if num == 5:
-               break
+         data_ops.saveImage(gen_imgs[0], step, IMAGES_DIR)
          print 'Done saving'
+
 
 
