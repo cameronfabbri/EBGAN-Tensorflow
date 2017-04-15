@@ -18,13 +18,11 @@ if __name__ == '__main__':
    parser.add_argument('--DATASET',    required=True,help='The DATASET to use')
    parser.add_argument('--DATA_DIR',   required=True,help='Directory where data is')
    parser.add_argument('--BATCH_SIZE', required=True,help='Batch size',type=int)
-   parser.add_argument('--NUM_GPU',    required=False,default=1,help='Number of GPUs to use', type=int)
    a = parser.parse_args()
 
    DATASET        = a.DATASET
    DATA_DIR       = a.DATA_DIR
    BATCH_SIZE     = a.BATCH_SIZE
-   NUM_GPU        = a.NUM_GPU
    CHECKPOINT_DIR = 'checkpoints/'+DATASET+'/'
    IMAGES_DIR     = CHECKPOINT_DIR+'images/'
 
@@ -44,7 +42,7 @@ if __name__ == '__main__':
    real_images       = data_ops.read_input_queue(filename_queue, BATCH_SIZE)
 
    # generated images
-   gen_images = netG(z, BATCH_SIZE, NUM_GPU)
+   gen_images = netG(z, BATCH_SIZE)
 
    errD_real, embeddings_real, decoded_real = netD(real_images, BATCH_SIZE)
    errD_fake, embeddings_fake, decoded_fake = netD(gen_images, BATCH_SIZE)
@@ -59,8 +57,6 @@ if __name__ == '__main__':
    # tensorboard summaries
    tf.summary.scalar('d_loss', errD)
    tf.summary.scalar('g_loss', errG)
-   #tf.summary.image('real_images', real_images, max_outputs=BATCH_SIZE)
-   #tf.summary.image('generated_images', gen_images, max_outputs=BATCH_SIZE)
    merged_summary_op = tf.summary.merge_all()
 
    # get all trainable variables, and split by network G and network D
@@ -119,7 +115,7 @@ if __name__ == '__main__':
       print 'step:',step,'D loss:',D_loss,'G_loss:',G_loss,'time:',time.time()-start
       step += 1
     
-      if step%1000 == 0:
+      if step%500 == 0:
          print 'Saving model...'
          saver.save(sess, CHECKPOINT_DIR+'checkpoint-'+str(step))
          saver.export_meta_graph(CHECKPOINT_DIR+'checkpoint-'+str(step)+'.meta')
