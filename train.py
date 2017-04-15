@@ -52,7 +52,7 @@ if __name__ == '__main__':
    margin = 20
    errD = margin - errD_fake+errD_real
    pt_loss = pullaway_loss(embeddings_fake, BATCH_SIZE)
-   errG = errD_fake + 0.1*pt_loss
+   errG = errD_fake# + 0.1*pt_loss
 
    # tensorboard summaries
    tf.summary.scalar('d_loss', errD)
@@ -65,10 +65,10 @@ if __name__ == '__main__':
    g_vars = [var for var in t_vars if 'g_' in var.name]
 
    # optimize G
-   G_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errG, var_list=g_vars, global_step=global_step)
+   G_train_op = tf.train.AdamOptimizer(learning_rate=1e-3, beta1=0.5).minimize(errG, var_list=g_vars, global_step=global_step)
 
    # optimize D
-   D_train_op = tf.train.AdamOptimizer(learning_rate=1e-3).minimize(errD, var_list=d_vars)
+   D_train_op = tf.train.AdamOptimizer(learning_rate=1e-3, beta1=0.5).minimize(errD, var_list=d_vars)
 
    saver = tf.train.Saver(max_to_keep=1)
    init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
@@ -91,11 +91,9 @@ if __name__ == '__main__':
          print "Could not restore model"
          pass
    
-   ########################################### training portion
-
-   step = sess.run(global_step)
    
-   coord = tf.train.Coordinator()
+   step    = sess.run(global_step)
+   coord   = tf.train.Coordinator()
    threads = tf.train.start_queue_runners(sess, coord=coord)
 
    while True:
@@ -104,9 +102,6 @@ if __name__ == '__main__':
 
       batch_z = np.random.uniform(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
       sess.run(D_train_op, feed_dict={z:batch_z})
-
-      batch_z = np.random.normal(-1.0, 1.0, size=[BATCH_SIZE, 100]).astype(np.float32)
-      sess.run(G_train_op, feed_dict={z:batch_z})
       sess.run(G_train_op, feed_dict={z:batch_z})
 
       D_loss, G_loss, summary = sess.run([errD, errG, merged_summary_op], feed_dict={z:batch_z})
