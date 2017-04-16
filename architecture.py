@@ -79,7 +79,7 @@ def encoder(input_images, reuse=False):
       conv2 = lrelu(conv2)
       print 'conv2:',conv2
       
-      conv3 = layers.conv2d(conv2, 256, 5, stride=2, normalizer_fn=layers.batch_norm, activation_fn=None, scope='d_conv3')
+      conv3 = layers.conv2d(conv2, 256, 4, stride=2, normalizer_fn=layers.batch_norm, activation_fn=None, scope='d_conv3')
       conv3 = lrelu(conv3)
       print 'conv3:',conv3
       

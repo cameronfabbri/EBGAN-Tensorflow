@@ -70,7 +70,9 @@ if __name__ == '__main__':
          start_y = end_y + 10
          end_y   = start_y+64
 
-   cv2.imwrite('results.jpg', canvas)
-   cv2.imshow('canvas', canvas)
-   cv2.waitKey(0)
-   cv2.destroyAllWindows()
+   import scipy.misc as misc
+   misc.imsave('results.jpg', canvas)
+   #cv2.imwrite('results.jpg', canvas)
+   #cv2.imshow('canvas', canvas)
+   #cv2.waitKey(0)
+   #cv2.destroyAllWindows()

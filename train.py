@@ -18,12 +18,14 @@ if __name__ == '__main__':
    parser.add_argument('--DATASET',    required=True,help='The DATASET to use')
    parser.add_argument('--DATA_DIR',   required=True,help='Directory where data is')
    parser.add_argument('--BATCH_SIZE', required=True,help='Batch size',type=int)
+   parser.add_argument('--PULLAWAY',   required=True,help='Pullaway term',type=int)
    a = parser.parse_args()
 
    DATASET        = a.DATASET
    DATA_DIR       = a.DATA_DIR
    BATCH_SIZE     = a.BATCH_SIZE
-   CHECKPOINT_DIR = 'checkpoints/'+DATASET+'/'
+   PULLAWAY       = a.PULLAWAY
+   CHECKPOINT_DIR = 'checkpoints/'+DATASET+'_'+str(PULLAWAY)+'/'
    IMAGES_DIR     = CHECKPOINT_DIR+'images/'
 
    try: os.mkdir('checkpoints/')
@@ -52,7 +54,12 @@ if __name__ == '__main__':
    margin = 20
    errD = margin - errD_fake+errD_real
    pt_loss = pullaway_loss(embeddings_fake, BATCH_SIZE)
-   errG = errD_fake# + 0.1*pt_loss
+   if PULLAWAY == 1:
+      print 'Using pullaway'
+      errG = errD_fake + 0.1*pt_loss
+   else:
+      print 'Not using pullaway'
+      errG = errD_fake
 
    # tensorboard summaries
    tf.summary.scalar('d_loss', errD)
@@ -96,7 +103,7 @@ if __name__ == '__main__':
    coord   = tf.train.Coordinator()
    threads = tf.train.start_queue_runners(sess, coord=coord)
 
-   while True:
+   while step < 40000:
       
       start = time.time()
 
