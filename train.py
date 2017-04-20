@@ -52,7 +52,10 @@ if __name__ == '__main__':
    # cost functions
    #errD = tf.reduce_mean(errD_real - errD_fake)
    margin = 20
-   errD = margin - errD_fake+errD_real
+   #errD = margin - errD_fake+errD_real
+
+   zero = tf.zeros_like(margin-errD_fake)
+   errD = errD_real + tf.maximum(zero, margin-errD_fake)
    pt_loss = pullaway_loss(embeddings_fake, BATCH_SIZE)
    if PULLAWAY == 1:
       print 'Using pullaway'
