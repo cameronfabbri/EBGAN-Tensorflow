@@ -11,7 +11,7 @@ def lrelu(x, leak=0.2, name='lrelu'):
    return tf.maximum(leak*x, x)
 
 def mse(pred, real, batch_size):
-   return tf.sqrt(2*tf.nn.l2_loss(pred-real))/batch_size
+   return tf.sqrt(tf.nn.l2_loss(pred-real))/batch_size
 
 def netG(z, batch_size):
 
@@ -52,7 +52,7 @@ def pullaway_loss(embeddings, batch_size):
    norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
    normalized_embeddings = embeddings / norm
    similarity = tf.matmul(normalized_embeddings, normalized_embeddings, transpose_b=True)
-   batch_size = tf.cast(tf.shape(embeddings)[0], tf.float32)
+   #batch_size = tf.cast(tf.shape(embeddings)[0], tf.float32)
    pt_loss = (tf.reduce_sum(similarity) - batch_size) / (batch_size * (batch_size - 1))
    return pt_loss
 
