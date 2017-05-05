@@ -50,10 +50,8 @@ if __name__ == '__main__':
    errD_fake, embeddings_fake, decoded_fake = netD(gen_images, BATCH_SIZE)
 
    # cost functions
-   #errD = tf.reduce_mean(errD_real - errD_fake)
    margin = 20
    #errD = margin - errD_fake+errD_real
-
    zero = tf.zeros_like(margin-errD_fake)
    errD = errD_real + tf.maximum(zero, margin-errD_fake)
    pt_loss = pullaway_loss(embeddings_fake, BATCH_SIZE)
@@ -106,7 +104,7 @@ if __name__ == '__main__':
    coord   = tf.train.Coordinator()
    threads = tf.train.start_queue_runners(sess, coord=coord)
 
-   while step < 40000:
+   while True:
       
       start = time.time()
 
